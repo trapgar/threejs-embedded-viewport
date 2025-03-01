@@ -1,0 +1,20 @@
+{
+  "name": "threejs-editor",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "build": ".\\node_modules\\.bin\\esbuild src/index.ts --bundle --minify --outfile=dist/three.editor.min.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "three": "^0.174.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.174.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.2"
+  }
+}
