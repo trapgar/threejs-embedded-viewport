@@ -1,0 +1,12 @@
+{
+    "configurations": [
+        {
+            "name": "Launch Browser",
+            "type": "msedge",
+            "request": "launch",
+            "url": "${workspaceFolder}/dist/index.html",
+            "webRoot": "${workspaceFolder}",
+            "preLaunchTask": "run Node.js"
+        }
+    ]
+}
