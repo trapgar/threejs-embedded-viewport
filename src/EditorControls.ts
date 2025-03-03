@@ -12,9 +12,15 @@ enum MovementMode {
 }
 
 const normalMatrix = new Matrix3();
-const EVENT_CHANGE = { type: 'change' };
 
-export default class EditorControls extends EventDispatcher<any> {
+type EditorControlsEventMap = {
+    change: any;
+    rotate: { delta: Vector3; };
+    zoom: { delta: Vector3; };
+    pan: { delta: Vector3; };
+}
+
+export default class EditorControls extends EventDispatcher<EditorControlsEventMap> {
     camera: Camera;
     element: HTMLCanvasElement;
     pointer = new Vector2();
@@ -100,7 +106,8 @@ export default class EditorControls extends EventDispatcher<any> {
         this.camera.position.copy(this.center).add(this.vector);
         this.camera.lookAt(this.center);
 
-        this.dispatchEvent(EVENT_CHANGE);
+        this.dispatchEvent({ type: 'rotate', delta })
+        this.dispatchEvent({ type: 'change' });
     }
 
     zoom(delta: Vector3) {
@@ -114,7 +121,8 @@ export default class EditorControls extends EventDispatcher<any> {
         delta.applyMatrix3(normalMatrix.getNormalMatrix(this.camera.matrix));
         this.camera.position.add(delta);
 
-        this.dispatchEvent(EVENT_CHANGE);
+        this.dispatchEvent({ type: 'zoom', delta })
+        this.dispatchEvent({ type: 'change' });
     }
 
     pan(delta: Vector3) {
@@ -126,6 +134,7 @@ export default class EditorControls extends EventDispatcher<any> {
         this.camera.position.add(delta);
         this.center.add(delta);
 
-        this.dispatchEvent(EVENT_CHANGE);
+        this.dispatchEvent({ type: 'pan', delta })
+        this.dispatchEvent({ type: 'change' });
     }
 }
