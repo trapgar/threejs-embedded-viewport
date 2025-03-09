@@ -1,7 +1,7 @@
-import * as THREE from 'three'
-import Editor from './Editor';
+import * as THREE from 'three';
+import Viewport from './Viewport';
 
 // @ts-ignore
 window.THREE = THREE;
 // @ts-ignore
-window.THREE.Editor = Editor;
+window.THREE.Viewport = Viewport;

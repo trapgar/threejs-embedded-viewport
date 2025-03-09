@@ -20,7 +20,7 @@ type EditorControlsEventMap = {
     pan: { delta: Vector3; };
 }
 
-export default class EditorControls extends EventDispatcher<EditorControlsEventMap> {
+export default class ViewportControls extends EventDispatcher<EditorControlsEventMap> {
     camera: Camera;
     element: HTMLCanvasElement;
     pointer = new Vector2();
@@ -53,10 +53,10 @@ export default class EditorControls extends EventDispatcher<EditorControlsEventM
 
     handlePointerDown(event: PointerEvent) {
         // Right+Click
-        if (event.button === MouseButton.Secondary)
+        if (event.button === MouseButton.Primary)
             this.movementMode = MovementMode.Rotate;
         // Left+Click
-        else if (event.button === MouseButton.Primary)
+        else if (event.button === MouseButton.Secondary)
             this.movementMode = MovementMode.Pan;
         // ???
         else

@@ -1,17 +1,17 @@
-import { BoxGeometry, ColorRepresentation, DirectionalLight, EventDispatcher, GridHelper, Group, Mesh, MeshPhongMaterial, Object3D, Object3DEventMap, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three';
-import EditorControls from './EditorControls';
+import { BoxGeometry, Camera, ColorRepresentation, DirectionalLight, EventDispatcher, GridHelper, Group, Mesh, MeshPhongMaterial, Object3D, Object3DEventMap, ObjectLoader, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three';
+import ViewportControls from './ViewportControls';
 import { throttle } from './utils';
 
 type ColorScheme = 'dark' | 'light';
 
-type EditorColorThemes = {
+type ViewportColorThemes = {
     [K in ColorScheme]: {
         background: [hex: ColorRepresentation, alpha: number];
         grid: [hex: number, alpha: number];
     };
 };
 
-const THEMES: EditorColorThemes = {
+const THEMES: ViewportColorThemes = {
     'dark': { background: [0x000000, 0], grid: [0x555555, 0x888888] },
     'light': { background: [0xaaaaaa, 1], grid: [0x999999, 0x777777] },
 };
@@ -21,22 +21,28 @@ CAMERA_DEFAULT.name = 'Camera';
 CAMERA_DEFAULT.position.set(5, 5, 10);
 CAMERA_DEFAULT.lookAt(new Vector3());
 
-type EditorEventMap = {
+type ViewportEventMap = {
     rendered: { frametime: number };
-    objectadded: {};
-    objectremoved: {};
+    objectadded: { object: Object3D; };
+    objectremoved: { object: Object3D; };
     geometrychanged: {};
+    camerareset: { camera: Camera; }
+    scenegraphchanged: {};
 };
 
-export default class Editor extends EventDispatcher<EditorEventMap> {
+export default class Viewport extends EventDispatcher<ViewportEventMap> {
     renderer: WebGLRenderer;
     scene: Scene;
     animations: FrameRequestCallback[] = [];
+    cameras: Dictionary<Camera> = {};
     camera: PerspectiveCamera;
     grid: Group<Object3DEventMap>;
     pid: number = -1;
-    controls: EditorControls;
+    controls: ViewportControls;
     $stats: HTMLElement;
+    scripts: URL[] = [];
+    geometries: Dictionary = {};
+    materials: Dictionary = {};
 
     overlays: Object3D[] = [];
 
@@ -47,11 +53,11 @@ export default class Editor extends EventDispatcher<EditorEventMap> {
         this.tick = this.tick.bind(this);
         this.render = this.render.bind(this);
         this.handleWindowResize = this.handleWindowResize.bind(this);
+        this.handleSceneGraphChanged = this.handleSceneGraphChanged.bind(this);
         this.handleStatChanged = this.handleStatChanged.bind(this);
         this.handleRendered = this.handleRendered.bind(this);
 
-        console.log(`js Editor will use color scheme %c${this.theme}`, 'font-weight: bold');
-        console.log('Baz');
+        console.log(`js Viewport will use color scheme %c${this.theme}`, 'font-weight: bold');
 
         const { width, height } = root.getBoundingClientRect();
         const renderer = this.renderer = new WebGLRenderer({ antialias: true })
@@ -93,10 +99,11 @@ export default class Editor extends EventDispatcher<EditorEventMap> {
         `;
         root.appendChild($stats);
 
-        this.controls = new EditorControls(camera, renderer.domElement);
+        this.controls = new ViewportControls(camera, renderer.domElement);
         // Re-render if the user moves the camera
         this.controls.addEventListener('change', this.render);
 
+        this.addEventListener('scenegraphchanged', this.handleSceneGraphChanged);
         this.addEventListener('rendered', throttle(this.handleRendered, 100));
         this.addEventListener('objectadded', this.handleStatChanged);
         this.addEventListener('objectadded', this.handleStatChanged);
@@ -107,6 +114,10 @@ export default class Editor extends EventDispatcher<EditorEventMap> {
         window.dispatchEvent(new Event('resize'));
 
         // this.tick(0);
+    }
+
+    handleSceneGraphChanged() {
+        this.render();
     }
 
     /** Callback for when a tracked statistic changed (objects, geometry, etc) */
@@ -142,7 +153,7 @@ export default class Editor extends EventDispatcher<EditorEventMap> {
     }
 
     /** Callback for when the scene was rendered */
-    handleRendered({ frametime }: EditorEventMap['rendered']) {
+    handleRendered({ frametime }: ViewportEventMap['rendered']) {
         const $rendertime = this.$stats.querySelector<HTMLElement>('[data-id="stat-rendertime"]')!;
         $rendertime.textContent = frametime.toFixed(2);
     }
@@ -155,6 +166,67 @@ export default class Editor extends EventDispatcher<EditorEventMap> {
             this.camera.aspect = aspect;
 
         this.camera.updateProjectionMatrix();
+    }
+
+    async fromJson(json: any) {
+        const loader = new ObjectLoader();
+        const camera = await loader.parseAsync(json.camera);
+
+        const existingUuid = this.camera.uuid;
+        const incomingUuid = camera.uuid;
+
+        // copy all properties, including uuid
+        this.camera.copy(camera);
+        this.camera.uuid = incomingUuid;
+
+        // remove old entry [existingUuid, this.camera]
+        delete this.cameras[existingUuid];
+        // add new entry [incomingUuid, this.camera]
+        this.cameras[incomingUuid] = this.camera;
+
+        this.dispatchEvent({ type: 'camerareset', camera: this.camera });
+
+        this.scripts = json.scripts;
+
+        const scene: any = await loader.parseAsync(json.scene);
+
+        this.scene.uuid = scene.uuid;
+        this.scene.name = scene.name;
+
+        this.scene.background = scene.background;
+        this.scene.environment = scene.environment;
+        this.scene.fog = scene.fog;
+        this.scene.backgroundBlurriness = scene.backgroundBlurriness;
+        this.scene.backgroundIntensity = scene.backgroundIntensity;
+
+        this.scene.userData = JSON.parse(JSON.stringify(scene.userData));
+
+        while (scene.children.length > 0)
+            this.addObject(scene.children[0]);
+
+        this.dispatchEvent({ type: 'scenegraphchanged' });
+    }
+
+    addObject(object: Object3D, parent?: any, index?: number) {
+        object.traverse((child: any) => {
+            if (child.geometry)
+                this.geometries[child.geometry.uuid] = child.geometry;
+            if (child.material)
+                this.materials[child.material.uuid] = child.material;
+
+            // this.addCamera(child);
+            // this.addHelper(child);
+        });
+
+        if (!parent)
+            this.scene.add(object);
+        else {
+            parent.children.splice(index, 0, object);
+            object.parent = parent;
+        }
+
+        this.dispatchEvent({ type: 'objectadded', object });
+        // this.dispatchEvent({ type: 'scenegraphchanged' });
     }
 
     /** Resets the scene and adds a single cube mesh & directional light. */
@@ -175,7 +247,7 @@ export default class Editor extends EventDispatcher<EditorEventMap> {
         this.animations.push(delta => cube.rotation.y = delta / (180 * 10));
         this.render();
 
-        this.dispatchEvent({ type: 'objectadded' });
+        this.dispatchEvent({ type: 'objectadded', object: cube });
     }
 
     /** Renders the scene */

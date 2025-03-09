@@ -11,7 +11,7 @@ const cmd = [
     'src/index.ts',
     '--bundle',
     '--minify',
-    '--outfile=dist/three.editor.min.js',
+    '--outfile=dist/three.viewport.min.js',
 ];
 
 if (watch)
