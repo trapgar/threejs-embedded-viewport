@@ -1,140 +1,150 @@
 import { Camera, EventDispatcher, Matrix3, Sphere, Spherical, Vector2, Vector3 } from 'three';
 
 enum MouseButton {
-    Primary = 0,
-    Secondary = 2,
+  Primary = 0,
+  Secondary = 2,
 }
 
 enum MovementMode {
-    Rotate,
-    Zoom,
-    Pan,
+  Rotate,
+  Zoom,
+  Pan,
 }
 
 const normalMatrix = new Matrix3();
 
-type EditorControlsEventMap = {
-    change: any;
-    rotate: { delta: Vector3; };
-    zoom: { delta: Vector3; };
-    pan: { delta: Vector3; };
-}
+type ViewportControlsEventMap = {
+  change: any;
+  rotate: { delta: Vector3; };
+  zoom: { delta: Vector3; };
+  pan: { delta: Vector3; };
+};
 
-export default class ViewportControls extends EventDispatcher<EditorControlsEventMap> {
-    camera: Camera;
-    element: HTMLCanvasElement;
-    pointer = new Vector2();
-    pointerOld = new Vector2();
-    movementMode = MovementMode.Pan;
-    delta = new Vector3();
-    vector = new Vector3();
-    spherical = new Spherical();
-    sphere = new Sphere();
+type ViewportControlsParams = {
+  camera: Camera;
+  canvas: HTMLCanvasElement;
+};
 
-    center = new Vector3();
-    panSpeed = 0.001;
-    zoomSpeed = 0.1;
-    rotationSpeed = 0.005;
+export default class ViewportControls extends EventDispatcher<ViewportControlsEventMap> {
+  camera: Camera;
+  element: HTMLCanvasElement;
+  pointer = new Vector2();
+  pointerOld = new Vector2();
+  movementMode = MovementMode.Pan;
+  delta = new Vector3();
+  vector = new Vector3();
+  spherical = new Spherical();
+  sphere = new Sphere();
 
-    constructor(camera: Camera, canvas: HTMLCanvasElement) {
-        super();
-        this.camera = camera;
-        this.element = canvas;
+  enabled: boolean = true;
 
-        this.handlePointerDown = this.handlePointerDown.bind(this);
-        this.handlePointerMove = this.handlePointerMove.bind(this);
-        this.handlePointerUp = this.handlePointerUp.bind(this);
-        this.handleMouseWheel = this.handleMouseWheel.bind(this);
+  center = new Vector3();
+  panSpeed = 0.001;
+  zoomSpeed = 0.1;
+  rotationSpeed = 0.005;
 
-        this.element.addEventListener('pointerdown', this.handlePointerDown);
-        this.element.addEventListener('wheel', this.handleMouseWheel);
-        this.element.addEventListener('contextmenu', e => e.preventDefault());
-    }
+  constructor({ camera, canvas }: ViewportControlsParams) {
+    super();
+    this.camera = camera;
+    this.element = canvas;
 
-    handlePointerDown(event: PointerEvent) {
-        // Right+Click
-        if (event.button === MouseButton.Primary)
-            this.movementMode = MovementMode.Rotate;
-        // Left+Click
-        else if (event.button === MouseButton.Secondary)
-            this.movementMode = MovementMode.Pan;
-        // ???
-        else
-            return;
+    this.handlePointerDown = this.handlePointerDown.bind(this);
+    this.handlePointerMove = this.handlePointerMove.bind(this);
+    this.handlePointerUp = this.handlePointerUp.bind(this);
+    this.handleMouseWheel = this.handleMouseWheel.bind(this);
 
-        this.element.ownerDocument.addEventListener('pointermove', this.handlePointerMove);
-        this.element.ownerDocument.addEventListener('pointerup', this.handlePointerUp);
+    this.element.addEventListener('pointerdown', this.handlePointerDown);
+    this.element.addEventListener('wheel', this.handleMouseWheel);
+    this.element.addEventListener('contextmenu', e => e.preventDefault());
+  }
 
-        this.pointerOld.set(event.clientX, event.clientY);
-    }
+  handlePointerDown(event: PointerEvent) {
+    if (!this.enabled)
+      return;
 
-    handleMouseWheel(event: WheelEvent) {
-        event.preventDefault();
+    // Right+Click
+    if (event.button === MouseButton.Primary)
+      this.movementMode = MovementMode.Rotate;
+    // Left+Click
+    else if (event.button === MouseButton.Secondary)
+      this.movementMode = MovementMode.Pan;
+    // ???
+    else
+      return;
 
-        this.zoom(this.delta.set(0, 0, event.deltaY > 0 ? 1 : - 1));
-    }
+    this.element.ownerDocument.addEventListener('pointermove', this.handlePointerMove);
+    this.element.ownerDocument.addEventListener('pointerup', this.handlePointerUp);
 
-    handlePointerMove(event: PointerEvent) {
-        this.pointer.set(event.clientX, event.clientY);
+    this.pointerOld.set(event.clientX, event.clientY);
+  }
 
-        const movementX = this.pointer.x - this.pointerOld.x;
-        const movementY = this.pointer.y - this.pointerOld.y;
+  handleMouseWheel(event: WheelEvent) {
+    event.preventDefault();
 
-        if (this.movementMode === MovementMode.Rotate)
-            this.rotate(this.delta.set(-movementX, - movementY, 0));
-        else if (this.movementMode === MovementMode.Zoom)
-            this.zoom(this.delta.set(0, 0, movementY));
-        else if (this.movementMode === MovementMode.Pan)
-            this.pan(this.delta.set(-movementX, movementY, 0));
+    this.zoom(this.delta.set(0, 0, event.deltaY > 0 ? 1 : - 1));
+  }
 
-        this.pointerOld.set(event.clientX, event.clientY);
-    }
+  handlePointerMove(event: PointerEvent) {
+    this.pointer.set(event.clientX, event.clientY);
 
-    handlePointerUp(event: PointerEvent) {
-        this.element.ownerDocument.removeEventListener('pointermove', this.handlePointerMove);
-        this.element.ownerDocument.removeEventListener('pointerup', this.handlePointerUp);
-    }
+    const movementX = this.pointer.x - this.pointerOld.x;
+    const movementY = this.pointer.y - this.pointerOld.y;
 
-    rotate(delta: Vector3) {
-        this.vector.copy(this.camera.position).sub(this.center);
+    if (this.movementMode === MovementMode.Rotate)
+      this.rotate(this.delta.set(-movementX, - movementY, 0));
+    else if (this.movementMode === MovementMode.Zoom)
+      this.zoom(this.delta.set(0, 0, movementY));
+    else if (this.movementMode === MovementMode.Pan)
+      this.pan(this.delta.set(-movementX, movementY, 0));
 
-        this.spherical.setFromVector3(this.vector);
-        this.spherical.theta += delta.x * this.rotationSpeed;
-        this.spherical.phi += delta.y * this.rotationSpeed;
-        this.spherical.makeSafe();
-        this.vector.setFromSpherical(this.spherical);
-        this.camera.position.copy(this.center).add(this.vector);
-        this.camera.lookAt(this.center);
+    this.pointerOld.set(event.clientX, event.clientY);
+  }
 
-        this.dispatchEvent({ type: 'rotate', delta })
-        this.dispatchEvent({ type: 'change' });
-    }
+  handlePointerUp(event: PointerEvent) {
+    this.element.ownerDocument.removeEventListener('pointermove', this.handlePointerMove);
+    this.element.ownerDocument.removeEventListener('pointerup', this.handlePointerUp);
+  }
 
-    zoom(delta: Vector3) {
-        const distance = this.camera.position.distanceTo(this.center);
+  rotate(delta: Vector3) {
+    this.vector.copy(this.camera.position).sub(this.center);
 
-        delta.multiplyScalar(distance * this.zoomSpeed);
+    this.spherical.setFromVector3(this.vector);
+    this.spherical.theta += delta.x * this.rotationSpeed;
+    this.spherical.phi += delta.y * this.rotationSpeed;
+    this.spherical.makeSafe();
+    this.vector.setFromSpherical(this.spherical);
+    this.camera.position.copy(this.center).add(this.vector);
+    this.camera.lookAt(this.center);
 
-        if (delta.length() > distance)
-            return;
+    this.dispatchEvent({ type: 'rotate', delta });
+    this.dispatchEvent({ type: 'change' });
+  }
 
-        delta.applyMatrix3(normalMatrix.getNormalMatrix(this.camera.matrix));
-        this.camera.position.add(delta);
+  zoom(delta: Vector3) {
+    const distance = this.camera.position.distanceTo(this.center);
 
-        this.dispatchEvent({ type: 'zoom', delta })
-        this.dispatchEvent({ type: 'change' });
-    }
+    delta.multiplyScalar(distance * this.zoomSpeed);
 
-    pan(delta: Vector3) {
-        const distance = this.camera.position.distanceTo(this.center);
+    if (delta.length() > distance)
+      return;
 
-        delta.multiplyScalar(distance * this.panSpeed);
-        delta.applyMatrix3(normalMatrix.getNormalMatrix(this.camera.matrix));
+    delta.applyMatrix3(normalMatrix.getNormalMatrix(this.camera.matrix));
+    this.camera.position.add(delta);
 
-        this.camera.position.add(delta);
-        this.center.add(delta);
+    this.dispatchEvent({ type: 'zoom', delta });
+    this.dispatchEvent({ type: 'change' });
+  }
 
-        this.dispatchEvent({ type: 'pan', delta })
-        this.dispatchEvent({ type: 'change' });
-    }
+  pan(delta: Vector3) {
+    const distance = this.camera.position.distanceTo(this.center);
+
+    delta.multiplyScalar(distance * this.panSpeed);
+    delta.applyMatrix3(normalMatrix.getNormalMatrix(this.camera.matrix));
+
+    this.camera.position.add(delta);
+    this.center.add(delta);
+
+    this.dispatchEvent({ type: 'pan', delta });
+    this.dispatchEvent({ type: 'change' });
+  }
 }

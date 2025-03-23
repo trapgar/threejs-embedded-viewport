@@ -1,12 +1,19 @@
 {
     "[typescript]": {
-        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "vscode.typescript-language-features",
+        "editor.detectIndentation": false,
+        "editor.tabSize": 2,
         "files.insertFinalNewline": true,
     },
-    "typescript.preferences.quoteStyle": "single",
     "editor.codeActionsOnSave": {
-        "source.removeUnusedImports": "always",
-        "source.sortImports": "always",
-        "source.fixAll.eslint": "always"
+        "source.fixAll.eslint": "always",
+        "source.organizeImports": "always",
     },
+    "editor.formatOnSave": true,
+    "eslint.enable": true,
+    "eslint.format.enable": true,
+    "files.trimFinalNewlines": true,
+    "files.trimTrailingWhitespace": true,
+    "typescript.format.semicolons": "insert",
+    "typescript.preferences.quoteStyle": "single",
 }

@@ -11,6 +11,7 @@ const cmd = [
     'src/index.ts',
     '--bundle',
     '--minify',
+    '--sourcemap',
     '--outfile=dist/three.viewport.min.js',
 ];
 
@@ -19,7 +20,11 @@ if (watch)
 
 const build = () => {
     console.clear();
-    execSync(cmd.join(' '), { stdio: 'inherit' });
+    try {
+        execSync(cmd.join(' '), { stdio: 'inherit' });
+    }
+    // stdio is inherited, so we shouldn't need to do anything here
+    catch (ex) { }
 };
 
 if (watch) {

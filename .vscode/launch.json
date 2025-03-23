@@ -6,7 +6,7 @@
             "request": "launch",
             "url": "${workspaceFolder}/dist/index.html",
             "webRoot": "${workspaceFolder}",
-            "preLaunchTask": "run Node.js"
+            "preLaunchTask": "run npm build"
         }
     ]
 }
