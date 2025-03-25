@@ -199,6 +199,8 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
   }
 
   async fromJson(json: any) {
+    this.scene.clear();
+
     const loader = new ObjectLoader();
     const camera = await loader.parseAsync(json.camera);
 
