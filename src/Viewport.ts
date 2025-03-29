@@ -1,8 +1,8 @@
 import { BoxGeometry, Camera, ColorRepresentation, DirectionalLight, EventDispatcher, GridHelper, Group, Mesh, MeshPhongMaterial, Object3D, Object3DEventMap, ObjectLoader, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three';
+import ObjectSelector from './ObjectSelector';
 import { TransformControls } from './old/TransformControls';
 import { throttle } from './utils';
 import ViewportControls from './ViewportControls';
-import ViewportSelector from './ViewportSelector';
 
 type ColorScheme = 'dark' | 'light';
 
@@ -23,6 +23,13 @@ CAMERA_DEFAULT.name = 'Camera';
 CAMERA_DEFAULT.position.set(5, 5, 10);
 CAMERA_DEFAULT.lookAt(new Vector3());
 
+type ViewportStatistics = {
+  objects: number;
+  vertices: number;
+  triangles: number;
+  frametime: number;
+};
+
 type ViewportEventMap = {
   rendered: { frametime: number; };
   objectadded: { object: Object3D; };
@@ -31,24 +38,32 @@ type ViewportEventMap = {
   camerareset: { camera: Camera; };
   scenegraphchanged: {};
   objectselected: { selected?: Object3D; };
+  statschanged: ViewportStatistics;
 };
 
 export default class Viewport extends EventDispatcher<ViewportEventMap> {
   $root: HTMLElement;
   renderer: WebGLRenderer;
   scene: Scene;
-  animations: FrameRequestCallback[] = [];
+  animations: FrameRequestCallback[] = [
+    () => {
+      if (this.selected) {
+        this.selector.helper.box.setFromObject(this.selected, true);
+      }
+    }
+  ];
   cameras: Dictionary<Camera> = {};
   camera: PerspectiveCamera;
   grid: Group<Object3DEventMap>;
   pid: number = -1;
   controls: ViewportControls;
-  selector: ViewportSelector;
-  $stats: HTMLElement;
+  selector: ObjectSelector;
   scripts: URL[] = [];
   geometries: Dictionary = {};
   materials: Dictionary = {};
   gizmo: TransformControls;
+  stats: Omit<ViewportStatistics, 'frametime'> = { objects: 0, vertices: 0, triangles: 0, };
+  selected?: Object3D;
 
   overlays: Object3D[] = [];
 
@@ -59,7 +74,6 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
     this.tick = this.tick.bind(this);
     this.render = this.render.bind(this);
     this.handleWindowResize = this.handleWindowResize.bind(this);
-    this.handleSceneGraphChanged = this.handleSceneGraphChanged.bind(this);
     this.handleStatChanged = this.handleStatChanged.bind(this);
     this.handleRendered = this.handleRendered.bind(this);
 
@@ -93,23 +107,16 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
 
     this.overlays.push(grid);
 
-    // TODO: move to class?
-    const $stats = this.$stats = document.createElement('div');
-    $stats.classList.add('overlay', 'overlay-stats');
-    $stats.innerHTML = `
-      <span data-id="stat-objects">0</span><span>Objects</span>
-      <span data-id="stat-vertices">0</span><span>Vertices</span>
-      <span data-id="stat-triangles">0</span><span>Triangles</span>
-      <span data-id="stat-rendertime">0.00</span><span>Render Time</span>
-    `;
-    root.appendChild($stats);
-
-    this.selector = new ViewportSelector({ camera, canvas: renderer.domElement, scene });
-    this.selector.addEventListener('change', ({ selected }) => this.dispatchEvent({ type: 'objectselected', selected }));
+    this.selector = new ObjectSelector({ camera, canvas: renderer.domElement, scene });
+    this.selector.addEventListener('change', ({ selected }) => {
+      this.selected = selected;
+      this.dispatchEvent({ type: 'objectselected', selected });
+    });
+    this.overlays.push(this.selector.helper);
 
     // Create gizmo 1st as it overrides the mousedown events
     // this.gizmo = new TransformControls({ dispatcher: this, camera, canvas: renderer.domElement });
-    this.gizmo = new TransformControls(camera, renderer.domElement as any);
+    this.gizmo = new TransformControls(camera, renderer.domElement);
     // this.overlays.push(this.gizmo.overlay);
     // this.gizmo.addEventListener('change', this.render);
     this.overlays.push(this.gizmo.getHelper());
@@ -118,19 +125,13 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
 
       if (selected)
         this.gizmo.attach(selected);
-
-      this.render();
     });
 
     this.gizmo.addEventListener('mousedown', () => this.controls.enabled = false);
     this.gizmo.addEventListener('mouseup', () => this.controls.enabled = true);
-    this.gizmo.addEventListener('change', this.render);
 
     this.controls = new ViewportControls({ camera, canvas: renderer.domElement });
-    // Re-render if the user moves the camera
-    this.controls.addEventListener('change', this.render);
 
-    this.addEventListener('scenegraphchanged', this.handleSceneGraphChanged);
     this.addEventListener('rendered', throttle(this.handleRendered, 100));
     this.addEventListener('objectadded', this.handleStatChanged);
     this.addEventListener('objectadded', this.handleStatChanged);
@@ -140,11 +141,7 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
     window.addEventListener('resize', this.handleWindowResize);
     window.dispatchEvent(new Event('resize'));
 
-    // this.tick(0);
-  }
-
-  handleSceneGraphChanged() {
-    this.render();
+    this.tick(0);
   }
 
   /** Callback for when a tracked statistic changed (objects, geometry, etc) */
@@ -174,15 +171,12 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
       });
     }
 
-    this.$stats.querySelector('[data-id="stat-objects"')!.textContent = objects.toFixed(0);
-    this.$stats.querySelector('[data-id="stat-vertices"')!.textContent = vertices.toFixed(0);
-    this.$stats.querySelector('[data-id="stat-triangles"')!.textContent = triangles.toFixed(0);
+    this.stats = { objects, vertices, triangles };
   }
 
   /** Callback for when the scene was rendered */
   handleRendered({ frametime }: ViewportEventMap['rendered']) {
-    const $rendertime = this.$stats.querySelector<HTMLElement>('[data-id="stat-rendertime"]')!;
-    $rendertime.textContent = frametime.toFixed(2);
+    this.dispatchEvent({ type: 'statschanged', ...this.stats, frametime });
   }
 
   /** Callback for when the window is re-sized */
@@ -195,11 +189,17 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
       this.camera.aspect = aspect;
 
     this.camera.updateProjectionMatrix();
-    this.render();
   }
 
   async fromJson(json: any) {
     this.scene.clear();
+    this.animations = [
+      () => {
+        if (this.selected) {
+          this.selector.helper.box.setFromObject(this.selected, true);
+        }
+      }
+    ];
 
     const loader = new ObjectLoader();
     const camera = await loader.parseAsync(json.camera);
@@ -276,8 +276,7 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
     this.scene.add(light);
 
     // 180 / 10 deg per second
-    this.animations.push(delta => cube.rotation.y = delta / (180 * 10));
-    this.render();
+    // this.animations.push(delta => cube.rotation.y = delta / (180 * 10));
 
     this.dispatchEvent({ type: 'objectadded', object: cube });
   }

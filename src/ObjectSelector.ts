@@ -1,4 +1,4 @@
-import { Camera, EventDispatcher, Object3D, Raycaster, Scene, Vector2 } from 'three';
+import { Box3, Box3Helper, Camera, EventDispatcher, Object3D, Raycaster, Scene, Vector2 } from 'three';
 import { getCoordinatesFromMouseEvent } from './utils';
 
 type ViewportSelectorEventMap = {
@@ -11,11 +11,14 @@ type ViewportSelectorParams = {
   scene: Scene;
 };
 
-export default class ViewportSelector extends EventDispatcher<ViewportSelectorEventMap> {
+export default class ObjectSelector extends EventDispatcher<ViewportSelectorEventMap> {
   element: HTMLCanvasElement;
   camera: Camera;
   scene: Scene;
   raycaster = new Raycaster();
+  selectionHighlighter = new Box3Helper(new Box3());
+
+  get helper() { return this.selectionHighlighter; }
 
   constructor({ camera, canvas, scene }: ViewportSelectorParams) {
     super();
@@ -24,6 +27,13 @@ export default class ViewportSelector extends EventDispatcher<ViewportSelectorEv
     this.scene = scene;
 
     this.handleMouseDown = this.handleMouseDown.bind(this);
+
+    this.selectionHighlighter.visible = false;
+
+    if ('depthTest' in this.selectionHighlighter.material)
+      this.selectionHighlighter.material.depthTest = false;
+    if ('transparent' in this.selectionHighlighter.material)
+      this.selectionHighlighter.material.transparent = true;
 
     this.element.addEventListener('mousedown', this.handleMouseDown);
   }
@@ -47,8 +57,10 @@ export default class ViewportSelector extends EventDispatcher<ViewportSelectorEv
 
         this.raycaster.setFromCamera(mouse, this.camera);
         const intersecting = this.getIntersectingObjects();
+        const selected = intersecting[0]?.object;
+        this.selectionHighlighter.visible = !!selected;
 
-        this.dispatchEvent({ type: 'change', selected: intersecting[0]?.object });
+        this.dispatchEvent({ type: 'change', selected });
       }
 
       $el.removeEventListener('mouseup', handleMouseUp);

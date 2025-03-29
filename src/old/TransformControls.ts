@@ -74,8 +74,16 @@ class TransformControls extends Controls<TransformControlsEventMap> {
   _quaternionStart = new Quaternion();
   _scaleStart = new Vector3();
 
-  constructor(camera, domElement = null) {
+  constructor(camera, domElement?: HTMLCanvasElement) {
     super(undefined, domElement);
+
+    document.addEventListener('keydown', e => {
+      switch (e.key) {
+        case 'w': return this.mode = 'translate';
+        case 'e': return this.mode = 'rotate';
+        case 'r': return this.mode = 'scale';
+      }
+    });
 
     const root = new TransformControlsRoot(this);
     this._root = root;
@@ -499,16 +507,6 @@ class TransformControls extends Controls<TransformControlsEventMap> {
 
   getRaycaster() {
     return _raycaster;
-  }
-
-  // TODO: deprecate
-
-  getMode() {
-    return this.mode;
-  }
-
-  setMode(mode) {
-    this.mode = mode;
   }
 
   setTranslationSnap(translationSnap) {
