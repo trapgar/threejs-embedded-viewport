@@ -15,9 +15,6 @@ const cmd = [
     '--outfile=dist/three.viewport.min.js',
 ];
 
-if (watch)
-    cmd.splice(cmd.length - 1, 0, '--sourcemap');
-
 const build = () => {
     console.clear();
     try {
@@ -28,7 +25,7 @@ const build = () => {
 };
 
 if (watch) {
-    fs.watch(PATH_SRC, {}, debounce((eventType) => {
+    fs.watch(PATH_SRC, { recursive: true }, debounce((eventType) => {
         if (eventType === 'change')
             build();
     }, 500));
