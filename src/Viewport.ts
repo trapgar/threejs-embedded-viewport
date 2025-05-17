@@ -132,7 +132,7 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
     this.addEventListener('geometrychanged', this.handleStatChanged);
 
     document.addEventListener('keydown', e => {
-      switch (k.key) {
+      switch (e.key) {
         case 'w': return this.gizmo.mode = 'translate';
         case 'e': return this.gizmo.mode = 'rotate';
         case 'r': return this.gizmo.mode = 'scale';
@@ -148,7 +148,7 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
       this.selector.helper,
       this.gizmo.getHelper()
     );
-    
+
     this.tick(0);
   }
 
