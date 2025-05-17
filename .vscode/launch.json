@@ -1,10 +1,10 @@
 {
     "configurations": [
         {
-            "name": "Launch Browser",
+            "name": "Launch in Edge",
             "type": "msedge",
             "request": "launch",
-            "url": "${workspaceFolder}/dist/index.html",
+            "url": "${workspaceFolder}/.debugger/index.html",
             "webRoot": "${workspaceFolder}",
             "preLaunchTask": "run npm build"
         }
