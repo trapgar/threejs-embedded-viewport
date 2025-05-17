@@ -1,8 +1,10 @@
 import { BoxGeometry, Camera, ColorRepresentation, DirectionalLight, EventDispatcher, GridHelper, Group, Mesh, MeshPhongMaterial, Object3D, Object3DEventMap, ObjectLoader, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three';
+// @ts-expect-error moduleResolution:nodenext issue ts(1479)
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
+// @ts-expect-error moduleResolution:nodenext issue ts(1479)
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import ObjectSelector from './ObjectSelector';
-import { TransformControls } from './old/TransformControls';
 import { throttle } from './utils';
-import ViewportControls from './ViewportControls';
 
 type ColorScheme = 'dark' | 'light';
 
@@ -56,7 +58,7 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
   camera: PerspectiveCamera;
   grid: Group<Object3DEventMap>;
   pid: number = -1;
-  controls: ViewportControls;
+  controls: OrbitControls;
   selector: ObjectSelector;
   scripts: URL[] = [];
   geometries: Dictionary = {};
@@ -105,21 +107,16 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
     grid2.material.vertexColors = false;
     grid.add(grid2);
 
-    this.overlays.push(grid);
-
     this.selector = new ObjectSelector({ camera, canvas: renderer.domElement, scene });
     this.selector.addEventListener('change', ({ selected }) => {
       this.selected = selected;
       this.dispatchEvent({ type: 'objectselected', selected });
     });
-    this.overlays.push(this.selector.helper);
 
+    // Camera controls
+    this.controls = new OrbitControls(camera, renderer.domElement);
     // Create gizmo 1st as it overrides the mousedown events
-    // this.gizmo = new TransformControls({ dispatcher: this, camera, canvas: renderer.domElement });
     this.gizmo = new TransformControls(camera, renderer.domElement);
-    // this.overlays.push(this.gizmo.overlay);
-    // this.gizmo.addEventListener('change', this.render);
-    this.overlays.push(this.gizmo.getHelper());
     this.selector.addEventListener('change', ({ selected }) => {
       this.gizmo.detach();
 
@@ -127,19 +124,30 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
         this.gizmo.attach(selected);
     });
 
-    this.gizmo.addEventListener('mousedown', () => this.controls.enabled = false);
-    this.gizmo.addEventListener('mouseup', () => this.controls.enabled = true);
-
-    this.controls = new ViewportControls({ camera, canvas: renderer.domElement });
+    this.gizmo.addEventListener('dragging-changed', e => this.controls.enabled = !e.value);
 
     this.addEventListener('rendered', throttle(this.handleRendered, 100));
     this.addEventListener('objectadded', this.handleStatChanged);
     this.addEventListener('objectadded', this.handleStatChanged);
     this.addEventListener('geometrychanged', this.handleStatChanged);
 
+    document.addEventListener('keydown', e => {
+      switch (e.key) {
+        case 'w': return this.gizmo.mode = 'translate';
+        case 'e': return this.gizmo.mode = 'rotate';
+        case 'r': return this.gizmo.mode = 'scale';
+      }
+    });
+
     // Kick off a resize event right away to update the camera aspect ratio
     window.addEventListener('resize', this.handleWindowResize);
     window.dispatchEvent(new Event('resize'));
+
+    this.overlays.push(
+      grid,
+      this.selector.helper,
+      this.gizmo.getHelper()
+    );
 
     this.tick(0);
   }

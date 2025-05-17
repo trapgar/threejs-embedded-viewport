@@ -11,6 +11,7 @@ type ViewportSelectorParams = {
   scene: Scene;
 };
 
+/** Controller used to track what object in the scene the user has 'selected', or wants to select (e.g. what did they click on?) */
 export default class ObjectSelector extends EventDispatcher<ViewportSelectorEventMap> {
   element: HTMLCanvasElement;
   camera: Camera;
