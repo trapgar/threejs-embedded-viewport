@@ -158,7 +158,7 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
 
     this.addEventListener('rendered', throttle(this.handleRendered, 100));
     this.addEventListener('objectadded', this.handleStatChanged);
-    this.addEventListener('objectadded', this.handleStatChanged);
+    this.addEventListener('objectremoved', this.handleStatChanged);
     this.addEventListener('geometrychanged', this.handleStatChanged);
 
     document.addEventListener('keydown', e => {
@@ -295,6 +295,7 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
 
     this.enabled = true;
 
+    this.handleStatChanged();
     this.dispatchEvent({ type: 'scenegraphchanged' });
   }
 
