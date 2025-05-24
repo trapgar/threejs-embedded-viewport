@@ -84,4 +84,14 @@ export default class ObjectSelector extends EventDispatcher<ViewportSelectorEven
 
     return this.raycaster.intersectObjects(objects, false);
   }
+
+  connect(newSelected: Object3D) {
+    this.selectionHighlighter.visible = true;
+    this.dispatchEvent({ type: 'change', selected: newSelected });
+  }
+
+  disconnect() {
+    this.selectionHighlighter.visible = false;
+    this.dispatchEvent({ type: 'change', selected: undefined });
+  }
 }

@@ -1,3 +1,4 @@
+/** Function that returns the X, Y coordinates from the given MouseEvent. */
 export default function getCoordinatesFromMouseEvent(dom: HTMLElement, event: Pick<MouseEvent, 'clientX' | 'clientY'>): [x: number, y: number] {
   const rect = dom.getBoundingClientRect();
 

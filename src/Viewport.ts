@@ -1,4 +1,4 @@
-import { BoxGeometry, Camera, ColorRepresentation, DirectionalLight, EventDispatcher, GridHelper, Group, Mesh, MeshPhongMaterial, Object3D, Object3DEventMap, ObjectLoader, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three';
+import { BoxGeometry, Camera, ColorRepresentation, DirectionalLight, Euler, EventDispatcher, GridHelper, Group, Mesh, MeshPhongMaterial, Object3D, Object3DEventMap, ObjectLoader, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three';
 // @ts-expect-error moduleResolution:nodenext issue ts(1479)
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 // @ts-expect-error moduleResolution:nodenext issue ts(1479)
@@ -24,6 +24,18 @@ const CAMERA_DEFAULT = new PerspectiveCamera(50, 1, 0.01, 1000);
 CAMERA_DEFAULT.name = 'Camera';
 CAMERA_DEFAULT.position.set(5, 5, 10);
 CAMERA_DEFAULT.lookAt(new Vector3());
+
+type ObjectInitialTransform = {
+  translation?: Vector3;
+  rotation?: Euler;
+  scale?: Vector3;
+};
+
+type ViewportConfiguration = {
+  translationSnap?: number;
+  rotationSnap?: number;
+  scaleSnap?: number;
+};
 
 type ViewportStatistics = {
   objects: number;
@@ -66,6 +78,7 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
   gizmo: TransformControls;
   stats: Omit<ViewportStatistics, 'frametime'> = { objects: 0, vertices: 0, triangles: 0, };
   selected?: Object3D;
+  enabled: boolean = true;
 
   overlays: Object3D[] = [];
 
@@ -113,6 +126,8 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
       this.dispatchEvent({ type: 'objectselected', selected });
     });
 
+    const initialtransform: ObjectInitialTransform = {};
+
     // Camera controls
     this.controls = new OrbitControls(camera, renderer.domElement);
     // Create gizmo 1st as it overrides the mousedown events
@@ -125,6 +140,21 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
     });
 
     this.gizmo.addEventListener('dragging-changed', e => this.controls.enabled = !e.value);
+    this.gizmo.addEventListener('mouseDown', e => {
+      initialtransform.translation = e.target.object.position.clone();
+      initialtransform.rotation = e.target.object.rotation.clone();
+      initialtransform.scale = e.target.object.scale.clone();
+    });
+    this.gizmo.addEventListener('mouseUp', e => {
+      if (e.target.object) {
+        if (initialtransform.translation && !e.target.object.position.equals(initialtransform.translation))
+          this.dispatchEvent({ type: 'scenegraphchanged' });
+        else if (initialtransform.rotation && !e.target.object.rotation.equals(initialtransform.rotation))
+          this.dispatchEvent({ type: 'scenegraphchanged' });
+        else if (initialtransform.scale && !e.target.object.scale.equals(initialtransform.scale))
+          this.dispatchEvent({ type: 'scenegraphchanged' });
+      }
+    });
 
     this.addEventListener('rendered', throttle(this.handleRendered, 100));
     this.addEventListener('objectadded', this.handleStatChanged);
@@ -150,6 +180,16 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
     );
 
     this.tick(0);
+  }
+
+  /** Updates the viewport configuration to the specified values. */
+  configure(config: ViewportConfiguration) {
+    if (config.translationSnap)
+      this.gizmo.setTranslationSnap(config.translationSnap);
+    if (config.rotationSnap)
+      this.gizmo.setRotationSnap(config.rotationSnap);
+    if (config.scaleSnap)
+      this.gizmo.setScaleSnap(config.scaleSnap);
   }
 
   /** Callback for when a tracked statistic changed (objects, geometry, etc) */
@@ -238,13 +278,50 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
     this.scene.fog = scene.fog;
     this.scene.backgroundBlurriness = scene.backgroundBlurriness;
     this.scene.backgroundIntensity = scene.backgroundIntensity;
-
     this.scene.userData = JSON.parse(JSON.stringify(scene.userData));
 
+    this.enabled = false;
+
+    // Try to maintain the currently selected object
     while (scene.children.length > 0)
       this.addObject(scene.children[0]);
 
+    if (this.selected) {
+      const found = this.scene.getObjectByProperty('uuid', this.selected.uuid);
+
+      if (found)
+        this.selector.connect(found);
+    }
+
+    this.enabled = true;
+
     this.dispatchEvent({ type: 'scenegraphchanged' });
+  }
+
+  async toJson() {
+    return await new Promise(resolve => {
+      const scene = this.scene.toJSON();
+      const camera = this.camera.toJSON();
+      const state = {
+        project: {
+          shadows: true,
+          vr: false,
+        },
+        camera,
+        scene,
+        scripts: this.scripts,
+      };
+
+      // @bug https://github.com/mrdoob/three.js/issues/31141
+      for (const child of scene.object.children ?? []) {
+        // @ts-ignore
+        if (['DirectionalLight', 'SpotLight'].includes(child?.type))
+          // @ts-ignore
+          delete child.target;
+      }
+
+      return resolve(state);
+    });
   }
 
   addObject(object: Object3D, parent?: any, index?: number) {
@@ -265,8 +342,10 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
       object.parent = parent;
     }
 
-    this.dispatchEvent({ type: 'objectadded', object });
-    // this.dispatchEvent({ type: 'scenegraphchanged' });
+    if (this.enabled) {
+      this.dispatchEvent({ type: 'objectadded', object });
+      this.dispatchEvent({ type: 'scenegraphchanged' });
+    }
   }
 
   /** Resets the scene and adds a single cube mesh & directional light. */
