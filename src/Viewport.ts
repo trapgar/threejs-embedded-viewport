@@ -1,4 +1,4 @@
-import { BoxGeometry, Camera, ColorRepresentation, DirectionalLight, Euler, EventDispatcher, GridHelper, Group, Mesh, MeshPhongMaterial, Object3D, Object3DEventMap, ObjectLoader, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three';
+import { BoxGeometry, Camera, ColorRepresentation, ConeGeometry, DirectionalLight, Euler, EventDispatcher, GridHelper, Group, Mesh, MeshPhongMaterial, Object3D, Object3DEventMap, ObjectLoader, PerspectiveCamera, PlaneGeometry, Scene, SphereGeometry, Vector3, WebGLRenderer } from 'three';
 // @ts-expect-error moduleResolution:nodenext issue ts(1479)
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 // @ts-expect-error moduleResolution:nodenext issue ts(1479)
@@ -53,6 +53,7 @@ type ViewportEventMap = {
   scenegraphchanged: {};
   objectselected: { selected?: Object3D; };
   statschanged: ViewportStatistics;
+  'add.shape': { shape: 'cube' | 'sphere' | 'cone' | 'plane'; };
 };
 
 export default class Viewport extends EventDispatcher<ViewportEventMap> {
@@ -91,6 +92,7 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
     this.handleWindowResize = this.handleWindowResize.bind(this);
     this.handleStatChanged = this.handleStatChanged.bind(this);
     this.handleRendered = this.handleRendered.bind(this);
+    this.handleAddShape = this.handleAddShape.bind(this);
 
     console.log(`THREE.js Embedded Viewport will use color scheme %c${this.theme}`, 'font-weight: bold');
 
@@ -160,12 +162,27 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
     this.addEventListener('objectadded', this.handleStatChanged);
     this.addEventListener('objectremoved', this.handleStatChanged);
     this.addEventListener('geometrychanged', this.handleStatChanged);
+    this.addEventListener('add.shape', this.handleAddShape);
 
     document.addEventListener('keydown', e => {
       switch (e.key) {
         case 'w': return this.gizmo.mode = 'translate';
         case 'e': return this.gizmo.mode = 'rotate';
         case 'r': return this.gizmo.mode = 'scale';
+        case 'Delete': {
+          if (this.selected) {
+            this.scene.remove(this.selected);
+            this.dispatchEvent({ type: 'objectremoved', object: this.selected });
+            this.selected = undefined;
+            this.dispatchEvent({ type: 'objectselected', selected: undefined });
+          }
+        }
+        case 'Escape': {
+          this.gizmo.detach();
+          this.selector.helper.visible = false;
+          this.dispatchEvent({ type: 'objectselected', selected: undefined });
+          break;
+        }
       }
     });
 
@@ -220,6 +237,50 @@ export default class Viewport extends EventDispatcher<ViewportEventMap> {
     }
 
     this.stats = { objects, vertices, triangles };
+  }
+
+  handleAddShape({ shape }: ViewportEventMap['add.shape']) {
+    let newObject: Object3D;
+
+    switch (shape) {
+      case 'cube': {
+        const boxGeometry = new BoxGeometry(1, 1, 1);
+        const material = new MeshPhongMaterial({ color: 0xffffff });
+        const cube = new Mesh(boxGeometry, material);
+        cube.position.set(0, 0.5, 0);
+        this.addObject(newObject = cube);
+        break;
+      }
+      case 'sphere': {
+        const sphereGeometry = new SphereGeometry(0.5, 32, 32);
+        const material = new MeshPhongMaterial({ color: 0xffffff });
+        const sphere = new Mesh(sphereGeometry, material);
+        sphere.position.set(0, 0.5, 0);
+        this.addObject(newObject = sphere);
+        break;
+      }
+      case 'cone': {
+        const coneGeometry = new ConeGeometry(0.5, 1, 32);
+        const material = new MeshPhongMaterial({ color: 0xffffff });
+        const cone = new Mesh(coneGeometry, material);
+        cone.position.set(0, 0.5, 0);
+        this.addObject(newObject = cone);
+        break;
+      }
+      case 'plane': {
+        const planeGeometry = new PlaneGeometry(1, 1);
+        const material = new MeshPhongMaterial({ color: 0xffffff });
+        const plane = new Mesh(planeGeometry, material);
+        plane.rotation.x = -Math.PI / 2; // Rotate to horizontal
+        this.addObject(newObject = plane);
+        break;
+      }
+      default:
+        console.warn(`Unknown shape type: ${shape}`);
+        return;
+    }
+
+    this.selector.connect(newObject);
   }
 
   /** Callback for when the scene was rendered */
